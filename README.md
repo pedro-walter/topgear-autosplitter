@@ -1,6 +1,6 @@
 An autosplitter for the awesome Top Gear SNES game
 
-Para português, clique [aqui](https://github.com/pedro-walter/topgear-autosplitter/blob/main/README_ptbr)
+Para português, clique [aqui](https://github.com/pedro-walter/topgear-autosplitter/blob/main/README_ptbr.md)
 
 # Usage
 
