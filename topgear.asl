@@ -6,13 +6,11 @@ state("emuhawk") {}
 
 startup // Runs only once when the autosplitter is loaded
 {
-    print("startup");
-    refreshRate = 200;
+    refreshRate = 60;
 }
 
 init // Runs when the emulator process is found
 {
-    print("init");
     // For the variables to be defined later
     vars.previousTracksCents = 0;
     vars.isInARace = false;
@@ -57,6 +55,21 @@ init // Runs when the emulator process is found
         new MemoryWatcher<ushort>((IntPtr)memoryOffset + 0x1EAE) { Name = "counter" },
         new MemoryWatcher<byte>((IntPtr)memoryOffset + 0x1E76) { Name = "playerOneCurrentLap" },
     };
+
+    Func <bool> isRaceFinished = () => {
+        var currentPlayerOneFinishTime = vars.watchers["playerOneFinishTime"].Current;
+        var currentPlayerOneCurrentLap = vars.watchers["playerOneCurrentLap"].Current;
+        return currentPlayerOneFinishTime > 0 &&
+            currentPlayerOneFinishTime < 65535 &&
+            currentPlayerOneCurrentLap > 1 &&
+            currentPlayerOneCurrentLap < 10;
+    };
+    vars.isRaceFinished = isRaceFinished;
+
+    Func <ushort, int> counterToCents = (ushort counter) => {
+        return counter * 5 / 3;
+    };
+    vars.counterToCents = counterToCents;
 }
 
 update {
@@ -66,20 +79,19 @@ update {
         var oldCountdownOn = vars.watchers["countdownOn"].Old;
         var currentCountdownOn = vars.watchers["countdownOn"].Current;
         vars.isInARace = oldCountdownOn == 1 && currentCountdownOn == 0;
-        if(vars.isInARace){
-            print("A RACE JUST STARTED");
-        }
+        // if(vars.isInARace){
+        //     print("A RACE JUST STARTED");
+        // }
+        return vars.isInARace;
     }
 } // Calls isloading, gameTime and reset
 
 start // Runs if update did not return false AND the timer is not running nor paused
 {
     vars.previousTracksCents = 0;
-
-    if(vars.isInARace){
-        print("STARTING NOW");
-        vars.isInARace = true;
-    }
+    // if(vars.isInARace){
+    // print("STARTING NOW");
+    // }
     return vars.isInARace;
 }
 
@@ -95,9 +107,11 @@ isLoading
 gameTime
 {
     var currentCents = vars.previousTracksCents;
-    // print("vars.watchers[\"counter\"].Current=" + vars.watchers["counter"].Current);
-    if(vars.isInARace){
-        currentCents += vars.watchers["counter"].Current * 5 / 3; // Converts internal counter to cents
+    if(vars.isRaceFinished() && vars.isInARace){
+        currentCents += vars.counterToCents(vars.watchers["playerOneFinishTime"].Current);
+    }
+    else if (vars.isInARace) {
+        currentCents += vars.counterToCents(vars.watchers["counter"].Current);
     }
 
     return new TimeSpan(0,0,0,0,currentCents*10); // Constructor expects miliseconds
@@ -108,18 +122,12 @@ reset {
 } // Calls split if it didn't return true
 
 split {
-    var currentPlayerOneFinishTime = vars.watchers["playerOneFinishTime"].Current;
-    var currentPlayerOneCurrentLap = vars.watchers["playerOneCurrentLap"].Current;
-    var raceFinished = currentPlayerOneFinishTime > 0 &&
-        currentPlayerOneFinishTime < 65535 &&
-        currentPlayerOneCurrentLap > 1 &&
-        currentPlayerOneCurrentLap < 10;
-    if(vars.isInARace && raceFinished){
-        print("A RACE JUST FINISHED");
+    if(vars.isInARace && vars.isRaceFinished()){
+        // print("A RACE JUST FINISHED");
         vars.isInARace = false;
-        int cents = currentPlayerOneFinishTime * 5 / 3; // Converts internal counter to cents
+        int cents = vars.counterToCents(vars.watchers["playerOneFinishTime"].Current);
         vars.previousTracksCents += cents;
-        print("Splitting now with time: " + cents/6000 + "\'" + (cents % 6000) / 100 + "\"" + cents % 100);
+        // print("Splitting now with time: " + cents/6000 + "\'" + (cents % 6000) / 100 + "\"" + cents % 100);
         return true;
     }
     return false;
