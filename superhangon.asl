@@ -81,12 +81,22 @@ startup
     });
 
 
-    refreshRate = 1;
+    refreshRate = 200;
 
     vars.DebugOutput = (Action<string>)((text) => {
         string time = System.DateTime.Now.ToString("dd/MM/yy hh:mm:ss:fff");
         File.AppendAllText(logfile, "[" + time + "]: " + text + "\r\n");
         print("[SEGA Master Splitter] "+text);
+    });
+
+    // SUPER HANG-ON SPECIFIC HELPERS
+    vars.convertHexTimeToTimeSpan = (Func<ushort, TimeSpan>)((time) => {
+        print(String.Format("time is {0:X}", time));
+        int centsInteger = time % 0x100;
+        print(String.Format("centsInteger is {0} or 0x{0:X}", centsInteger));
+        int cents = int.Parse(centsInteger.ToString("X"));
+        int seconds = int.Parse((time - centsInteger).ToString("X")) / 100;
+        return new TimeSpan(0,0,0,seconds,cents*10);
     });
 }
 
@@ -238,10 +248,20 @@ init
         }
     });
 
+    // GAME SPECIFIC VARIABLES
+    vars.lastSplitSector = 0;
+    vars.lastSavedSector = 0;
+    vars.timeUntilLastSector = new TimeSpan();
+
     vars.addUShortAddresses(new Dictionary<string, long>() {
-        { "timer", 0x0558 },
-        { "sector0", 0x0400 }
+        { "timer", 0x0558 }
     });
+    for (int i = 1;i < 19;i++) {
+        print("adding sector" + i);
+        vars.addUShortAddresses(new Dictionary<string, long>() {
+            { "sector" + i, 0x0400 + (i - 1) * 2 }
+        });
+    }
     vars.addByteAddresses(new Dictionary<string, long>() {
         { "screenID", 0xC704 }
     });
@@ -249,8 +269,24 @@ init
 
 update {
     vars.watchers.UpdateAll(game);
+
+    // DEBUG
     print("Timer is " + vars.watchers["timer"].Current);
-    print("screenID is " + vars.watchers["screenID"].Current + ", was " + vars.watchers["screenID"].Old);
+    print("vars.lastSavedSector is " + vars.lastSavedSector);
+    print("vars.lastSplitSector is " + vars.lastSplitSector);
+    print(String.Format("sector1 is {0} or 0x{0:X}", vars.watchers["sector1"].Current));
+    print(String.Format("sector2 is {0} or 0x{0:X}", vars.watchers["sector2"].Current));
+    print(String.Format("sector3 is {0} or 0x{0:X}", vars.watchers["sector3"].Current));
+    print(String.Format("sector4 is {0} or 0x{0:X}", vars.watchers["sector4"].Current));
+    print(String.Format("sector5 is {0} or 0x{0:X}", vars.watchers["sector5"].Current));
+    print(String.Format("sector6 is {0} or 0x{0:X}", vars.watchers["sector6"].Current));
+
+    //Find the last sector that the game has in memory
+    //TODO: make sure that the last export sector behaves properly
+    if (vars.watchers["sector" + (vars.lastSavedSector + 1)].Current > 0){
+        vars.lastSavedSector++;
+    }
+
 } // Calls isloading, gameTime and reset
 
 start // Runs if update did not return false AND the timer is not running nor paused
@@ -267,25 +303,45 @@ start // Runs if update did not return false AND the timer is not running nor pa
 //     return true;
 // }
 
-// gameTime
-// {
-//     //return new TimeSpan(0,0,0,0,currentCents*10); // Constructor expects miliseconds
-// }
+gameTime
+{
+    if (vars.lastSavedSector == 0 && vars.lastSplitSector == 0) {
+        return vars.convertHexTimeToTimeSpan(vars.watchers["timer"].Current);
+    }
+    if (vars.lastSavedSector == 1 && vars.lastSplitSector == 0) {
+        return vars.convertHexTimeToTimeSpan(vars.watchers["sector" + vars.lastSavedSector].Current);
+    }
+    // else if (lastSavedSector == vars.lastSplitSector) {
+    //     // return TotalTimeSoFar + internalGameTime adjusted 
+    // }
+    // else if (lastSavedSector > vars.lastSplitSector) {
+    //     // return TotalTimeSoFar + lastSplitSector time adjusted
+    // }
+    
+
+
+
+
+
+    // if (vars.lastSplitSector < lastSavedSector){
+    //     return internalGameTime;
+    // }
+    // int centsLastSector = vars.watchers["sector" + vars.lastSplitSector].Current % 0x100;
+    // int secondsLastSector = int.Parse((vars.watchers["sector" + vars.lastSplitSector].Current - centsLastSector).ToString("X")) / 100;
+    // return vars.timeUntilLastSector + internalGameTime - new TimeSpan(0,0,0,0,centsLastSector*10); // Constructor expects miliseconds
+    return new TimeSpan(0,0,0,0,0);
+}
 
 reset {
     return vars.watchers["screenID"].Current < 2 && vars.watchers["screenID"].Old > 1;
 } // Calls split if it didn't return true
 
-// split {
-//     if(vars.isInARace && vars.isRaceFinished()){
-//         // print("A RACE JUST FINISHED");
-//         vars.isInARace = false;
-//         int cents = vars.counterToCents(vars.watchers["playerOneFinishTime"].Current);
-//         vars.previousTracksCents += cents;
-//         // print("Splitting now with time: " + cents/6000 + "\'" + (cents % 6000) / 100 + "\"" + cents % 100);
-//         return true;
-//     }
-//     return false;
-// }
+split {
+    if (vars.lastSavedSector > vars.lastSplitSector){
+        vars.lastSplitSector++;
+        return true;
+    }
+    return false;
+}
 
 
