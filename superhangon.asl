@@ -239,73 +239,24 @@ init
     });
 
     vars.addUShortAddresses(new Dictionary<string, long>() {
-        { "timer", 0x0558 }
+        { "timer", 0x0558 },
+        { "sector0", 0x0400 }
     });
-    vars.addULongAddresses(new Dictionary<string, long>() {
-        { "init", 0x0000 }
+    vars.addByteAddresses(new Dictionary<string, long>() {
+        { "screenID", 0xC704 }
     });
 }
-
-
-// init // Runs when the emulator process is found
-// {
-//     // For the variables to be defined later
-//     vars.previousTracksCents = 0;
-//     vars.isInARace = false;
-
-//     var states = new Dictionary<int, long>
-//     {
-//         //Look for D0AF3505
-//         { 9646080, 0x97EE04 },      // Snes9x-rr 1.60
-//         { 13565952, 0x140925118 },  // Snes9x-rr 1.60 (x64)
-//         { 9027584, 0x94DB54 },      // Snes9x 1.60
-//         { 12836864, 0x1408D8BE8 },  // Snes9x 1.60 (x64)
-//         { 16019456, 0x94D144 },     // higan v106
-//         { 15360000, 0x8AB144 },     // higan v106.112
-//         { 10096640, 0x72BECC },     // bsnes v107
-//         { 10338304, 0x762F2C },     // bsnes v107.1
-//         { 47230976, 0x765F2C },     // bsnes v107.2/107.3
-//         { 131543040, 0xA9BD5C },    // bsnes v110
-//         { 51924992, 0xA9DD5C },     // bsnes v111
-//         { 52056064, 0xAAED7C },     // bsnes v112
-//         { 52477952, 0xB16D7C },     // bsnes v115
-//         { 7061504, 0x36F11500240 }, // BizHawk 2.3
-//         { 7249920, 0x36F11500240 }, // BizHawk 2.3.1
-//         { 6938624, 0x36F11500240 }, // BizHawk 2.3.2
-//         { 4546560, 0x36F05F94040 }, // BizHawk 2.6.1
-//         { 4538368, 0x36F05F94040 }, // BizHawk 2.6.2
-//     };
-
-//     long memoryOffset;
-//     if (states.TryGetValue(modules.First().ModuleMemorySize, out memoryOffset)) {
-//         if (memory.ProcessName.ToLower().Contains("snes9x")) {
-//             memoryOffset = memory.ReadValue<int>((IntPtr)memoryOffset);
-//         }
-//     }
-
-//     if (memoryOffset == 0) {
-//         throw new Exception("Memory not yet initialized. modules.First().ModuleMemorySize=" + modules.First().ModuleMemorySize);
-//     }
-
-//     vars.watchers = new MemoryWatcherList {
-//         new MemoryWatcher<ushort>((IntPtr)memoryOffset + 0x0558) { Name = "timer" }
-//     };
-// }
 
 update {
     vars.watchers.UpdateAll(game);
     print("Timer is " + vars.watchers["timer"].Current);
-    print("Init is " + vars.watchers["init"].Current);
+    print("screenID is " + vars.watchers["screenID"].Current + ", was " + vars.watchers["screenID"].Old);
 } // Calls isloading, gameTime and reset
 
-// start // Runs if update did not return false AND the timer is not running nor paused
-// {
-//     vars.previousTracksCents = 0;
-//     // if(vars.isInARace){
-//     // print("STARTING NOW");
-//     // }
-//     return vars.isInARace;
-// }
+start // Runs if update did not return false AND the timer is not running nor paused
+{
+    return vars.watchers["timer"].Current > 0;
+}
 
 // isLoading
 // {
@@ -318,14 +269,12 @@ update {
 
 // gameTime
 // {
-    
-    
 //     //return new TimeSpan(0,0,0,0,currentCents*10); // Constructor expects miliseconds
 // }
 
-// reset {
-//     return false; // Never resets automatically
-// } // Calls split if it didn't return true
+reset {
+    return vars.watchers["screenID"].Current < 2 && vars.watchers["screenID"].Old > 1;
+} // Calls split if it didn't return true
 
 // split {
 //     if(vars.isInARace && vars.isRaceFinished()){
