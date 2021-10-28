@@ -98,6 +98,10 @@ startup
         int seconds = int.Parse((time - centsInteger).ToString("X")) / 100;
         return new TimeSpan(0,0,0,seconds,cents*10);
     });
+
+    vars.getSectorCenths = (Func<int, int>)((sectorID) => {
+        return int.Parse((vars.watchers["sector" + sectorID].Current % 0x100).ToString("X"));
+    });    
 }
 
 init
@@ -249,9 +253,13 @@ init
     });
 
     // GAME SPECIFIC VARIABLES
-    vars.lastSplitSector = 0;
-    vars.lastSavedSector = 0;
-    vars.timeUntilLastSector = new TimeSpan();
+    vars.resetVariables = (Action)(() => {
+        vars.lastSplitSector = 0;
+        vars.lastSavedSector = 0;
+        vars.timerIsRunning = false;
+        vars.timeUntilLastSector = new TimeSpan();
+    });
+    vars.resetVariables();
 
     vars.addUShortAddresses(new Dictionary<string, long>() {
         { "timer", 0x0558 }
@@ -283,7 +291,7 @@ update {
 
     //Find the last sector that the game has in memory
     //TODO: make sure that the last export sector behaves properly
-    if (vars.watchers["sector" + (vars.lastSavedSector + 1)].Current > 0){
+    if (vars.watchers["sector" + (vars.lastSavedSector + 1)].Current > 0 && vars.timerIsRunning){
         vars.lastSavedSector++;
     }
 
@@ -291,17 +299,22 @@ update {
 
 start // Runs if update did not return false AND the timer is not running nor paused
 {
-    return vars.watchers["timer"].Current > 0;
+
+    if (vars.watchers["timer"].Current > 0){
+        vars.timerIsRunning = true;
+        return true;
+    };
+    return false;
 }
 
-// isLoading
-// {
-//     // From the AutoSplit documentation:
-//     // "If you want the Game Time to not run in between the synchronization interval and only ever return
-//     // the actual Game Time of the game, make sure to implement isLoading with a constant
-//     // return value of true."
-//     return true;
-// }
+isLoading
+{
+    // From the AutoSplit documentation:
+    // "If you want the Game Time to not run in between the synchronization interval and only ever return
+    // the actual Game Time of the game, make sure to implement isLoading with a constant
+    // return value of true."
+    return true;
+}
 
 gameTime
 {
@@ -311,33 +324,35 @@ gameTime
     if (vars.lastSavedSector == 1 && vars.lastSplitSector == 0) {
         return vars.convertHexTimeToTimeSpan(vars.watchers["sector" + vars.lastSavedSector].Current);
     }
-    // else if (lastSavedSector == vars.lastSplitSector) {
-    //     // return TotalTimeSoFar + internalGameTime adjusted 
-    // }
-    // else if (lastSavedSector > vars.lastSplitSector) {
-    //     // return TotalTimeSoFar + lastSplitSector time adjusted
-    // }
-    
-
-
-
-
-
-    // if (vars.lastSplitSector < lastSavedSector){
-    //     return internalGameTime;
-    // }
-    // int centsLastSector = vars.watchers["sector" + vars.lastSplitSector].Current % 0x100;
-    // int secondsLastSector = int.Parse((vars.watchers["sector" + vars.lastSplitSector].Current - centsLastSector).ToString("X")) / 100;
-    // return vars.timeUntilLastSector + internalGameTime - new TimeSpan(0,0,0,0,centsLastSector*10); // Constructor expects miliseconds
+    if (vars.lastSavedSector == vars.lastSplitSector) {
+        TimeSpan internalGameTime = vars.convertHexTimeToTimeSpan(vars.watchers["timer"].Current);
+        int lastSectorCenths = vars.getSectorCenths(vars.lastSavedSector);
+        print("lastSectorCenths=" + lastSectorCenths);
+        return vars.timeUntilLastSector + internalGameTime - new TimeSpan(0,0,0,0,vars.getSectorCenths(vars.lastSavedSector) * 10);
+    }
+    if (vars.lastSavedSector > vars.lastSplitSector) {
+        TimeSpan lastSectorTime = vars.convertHexTimeToTimeSpan(vars.watchers["sector" + vars.lastSavedSector].Current);
+        int lastLastSectorCenths = vars.getSectorCenths(vars.lastSavedSector - 1);
+        print("lastLastSectorCenths=" + lastLastSectorCenths);
+        return vars.timeUntilLastSector + lastSectorTime - new TimeSpan(0,0,0,0,lastLastSectorCenths * 10);
+    }
     return new TimeSpan(0,0,0,0,0);
 }
 
 reset {
-    return vars.watchers["screenID"].Current < 2 && vars.watchers["screenID"].Old > 1;
+    if (vars.watchers["screenID"].Current < 2 && vars.watchers["screenID"].Old > 1){
+        vars.resetVariables();
+        return true;
+    }
+    return false;
 } // Calls split if it didn't return true
 
 split {
     if (vars.lastSavedSector > vars.lastSplitSector){
+        vars.timeUntilLastSector += vars.convertHexTimeToTimeSpan(vars.watchers["sector" + vars.lastSavedSector].Current);
+        if (vars.lastSplitSector > 0) {
+            vars.timeUntilLastSector -= new TimeSpan(0,0,0,0,vars.getSectorCenths(vars.lastSavedSector - 1));
+        }
         vars.lastSplitSector++;
         return true;
     }
