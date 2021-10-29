@@ -282,6 +282,7 @@ update {
     print("Timer is " + vars.watchers["timer"].Current);
     print("vars.lastSavedSector is " + vars.lastSavedSector);
     print("vars.lastSplitSector is " + vars.lastSplitSector);
+    print("vars.timerIsRunning is " + vars.timerIsRunning);
     print(String.Format("sector1 is {0} or 0x{0:X}", vars.watchers["sector1"].Current));
     print(String.Format("sector2 is {0} or 0x{0:X}", vars.watchers["sector2"].Current));
     print(String.Format("sector3 is {0} or 0x{0:X}", vars.watchers["sector3"].Current));
@@ -301,6 +302,7 @@ start // Runs if update did not return false AND the timer is not running nor pa
 {
 
     if (vars.watchers["timer"].Current > 0){
+        vars.resetVariables();
         vars.timerIsRunning = true;
         return true;
     };
@@ -351,7 +353,7 @@ split {
     if (vars.lastSavedSector > vars.lastSplitSector){
         vars.timeUntilLastSector += vars.convertHexTimeToTimeSpan(vars.watchers["sector" + vars.lastSavedSector].Current);
         if (vars.lastSplitSector > 0) {
-            vars.timeUntilLastSector -= new TimeSpan(0,0,0,0,vars.getSectorCenths(vars.lastSavedSector - 1));
+            vars.timeUntilLastSector -= new TimeSpan(0,0,0,0,vars.getSectorCenths(vars.lastSavedSector - 1) * 10);
         }
         vars.lastSplitSector++;
         return true;
