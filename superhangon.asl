@@ -14,46 +14,12 @@ state("Sonic3AIR") {}
 
 startup
 {
-    vars.timerModel = new TimerModel { CurrentState = timer };
-    string logfile = Directory.GetCurrentDirectory() + "\\SEGAMasterSplitter.log";
+    refreshRate = 61;
+
+    string logfile = Directory.GetCurrentDirectory() + "\\superhangon-splitter.log";
     if ( File.Exists( logfile ) ) {
         File.Delete( logfile );
     }
-
-
-    vars.SwapEndianness = (Func<ushort,ushort>)((value) => {
-        var b1 = (value >> 0) & 0xff;
-        var b2 = (value >> 8) & 0xff;
-
-        return (ushort) (b1 << 8 | b2 << 0);
-    });
-
-    vars.SwapEndiannessInt = (Func<uint, uint>)((value) => {
-        return ((value & 0x000000ff) << 24) +
-            ((value & 0x0000ff00) << 8) +
-            ((value & 0x00ff0000) >> 8) +
-            ((value & 0xff000000) >> 24);
-    });
-
-    vars.SwapEndiannessIntAndTruncate = (Func<uint, uint>)((value) => {
-        return ((value & 0x00000000) << 24) +
-            ((value & 0x0000ff00) << 8) +
-            ((value & 0x00ff0000) >> 8) +
-            ((value & 0xff000000) >> 24);
-    });
-
-    vars.SwapEndiannessLong = (Func<ulong, ulong>)((value) => {
-        return 
-            ((value & 0x00000000000000FF) << 56) +
-            ((value & 0x000000000000FF00) << 40) +
-            ((value & 0x0000000000FF0000) << 24) +
-            ((value & 0x00000000FF000000) << 8) +
-            ((value & 0x000000FF00000000) >> 8) +
-            ((value & 0x0000FF0000000000) >> 24) +
-            ((value & 0x00FF000000000000) >> 40) +
-            ((value & 0xFF00000000000000) >> 56) 
-            ;
-    });
 
     vars.LookUp = (Func<Process, SigScanTarget, IntPtr>)((proc, target) =>
     {
@@ -81,19 +47,15 @@ startup
     });
 
 
-    refreshRate = 200;
-
     vars.DebugOutput = (Action<string>)((text) => {
         string time = System.DateTime.Now.ToString("dd/MM/yy hh:mm:ss:fff");
         File.AppendAllText(logfile, "[" + time + "]: " + text + "\r\n");
-        print("[SEGA Master Splitter] "+text);
+        print("[Super Hang-on Splitter] "+text);
     });
 
     // SUPER HANG-ON SPECIFIC HELPERS
     vars.convertHexTimeToTimeSpan = (Func<ushort, TimeSpan>)((time) => {
-        print(String.Format("time is {0:X}", time));
         int centsInteger = time % 0x100;
-        print(String.Format("centsInteger is {0} or 0x{0:X}", centsInteger));
         int cents = int.Parse(centsInteger.ToString("X"));
         int seconds = int.Parse((time - centsInteger).ToString("X")) / 100;
         return new TimeSpan(0,0,0,seconds,cents*10);
@@ -256,21 +218,25 @@ init
     vars.resetVariables = (Action)(() => {
         vars.lastSplitSector = 0;
         vars.lastSavedSector = 0;
+        vars.originalMode = false;
         vars.timerIsRunning = false;
         vars.timeUntilLastSector = new TimeSpan();
     });
     vars.resetVariables();
 
     vars.addUShortAddresses(new Dictionary<string, long>() {
-        { "timer", 0x0558 }
+        { "timer", 0x0558 },
+        { "originalModeScreen", 0xB648 },
+        { "originalRaceSelected", 0xB602 },
+        { "originalSponsor", 0xB610 },
     });
     for (int i = 1;i < 19;i++) {
-        print("adding sector" + i);
         vars.addUShortAddresses(new Dictionary<string, long>() {
             { "sector" + i, 0x0400 + (i - 1) * 2 }
         });
     }
     vars.addByteAddresses(new Dictionary<string, long>() {
+        { "originalTotalRaces", 0xB644 },
         { "screenID", 0xC704 }
     });
 }
@@ -279,16 +245,16 @@ update {
     vars.watchers.UpdateAll(game);
 
     // DEBUG
-    print("Timer is " + vars.watchers["timer"].Current);
-    print("vars.lastSavedSector is " + vars.lastSavedSector);
-    print("vars.lastSplitSector is " + vars.lastSplitSector);
-    print("vars.timerIsRunning is " + vars.timerIsRunning);
-    print(String.Format("sector1 is {0} or 0x{0:X}", vars.watchers["sector1"].Current));
-    print(String.Format("sector2 is {0} or 0x{0:X}", vars.watchers["sector2"].Current));
-    print(String.Format("sector3 is {0} or 0x{0:X}", vars.watchers["sector3"].Current));
-    print(String.Format("sector4 is {0} or 0x{0:X}", vars.watchers["sector4"].Current));
-    print(String.Format("sector5 is {0} or 0x{0:X}", vars.watchers["sector5"].Current));
-    print(String.Format("sector6 is {0} or 0x{0:X}", vars.watchers["sector6"].Current));
+    // print("Timer is " + vars.watchers["timer"].Current);
+    // print("vars.lastSavedSector is " + vars.lastSavedSector);
+    // print("vars.lastSplitSector is " + vars.lastSplitSector);
+    // print("vars.timerIsRunning is " + vars.timerIsRunning);
+    // print(String.Format("sector1 is {0} or 0x{0:X}", vars.watchers["sector1"].Current));
+    // print(String.Format("sector2 is {0} or 0x{0:X}", vars.watchers["sector2"].Current));
+    // print(String.Format("sector3 is {0} or 0x{0:X}", vars.watchers["sector3"].Current));
+    // print(String.Format("sector4 is {0} or 0x{0:X}", vars.watchers["sector4"].Current));
+    // print(String.Format("sector5 is {0} or 0x{0:X}", vars.watchers["sector5"].Current));
+    // print(String.Format("sector6 is {0} or 0x{0:X}", vars.watchers["sector6"].Current));
 
     //Find the last sector that the game has in memory
     //TODO: make sure that the last export sector behaves properly
@@ -300,7 +266,10 @@ update {
 
 start // Runs if update did not return false AND the timer is not running nor paused
 {
-
+    if (vars.watchers["originalModeScreen"].Current > 0){
+        vars.originalMode = true;
+        return true;
+    }
     if (vars.watchers["timer"].Current > 0){
         vars.resetVariables();
         vars.timerIsRunning = true;
@@ -315,11 +284,12 @@ isLoading
     // "If you want the Game Time to not run in between the synchronization interval and only ever return
     // the actual Game Time of the game, make sure to implement isLoading with a constant
     // return value of true."
-    return true;
+    return !vars.originalMode;
 }
 
 gameTime
 {
+    if (vars.originalMode) return;
     if (vars.lastSavedSector == 0 && vars.lastSplitSector == 0) {
         return vars.convertHexTimeToTimeSpan(vars.watchers["timer"].Current);
     }
@@ -329,13 +299,11 @@ gameTime
     if (vars.lastSavedSector == vars.lastSplitSector) {
         TimeSpan internalGameTime = vars.convertHexTimeToTimeSpan(vars.watchers["timer"].Current);
         int lastSectorCenths = vars.getSectorCenths(vars.lastSavedSector);
-        print("lastSectorCenths=" + lastSectorCenths);
         return vars.timeUntilLastSector + internalGameTime - new TimeSpan(0,0,0,0,vars.getSectorCenths(vars.lastSavedSector) * 10);
     }
     if (vars.lastSavedSector > vars.lastSplitSector) {
         TimeSpan lastSectorTime = vars.convertHexTimeToTimeSpan(vars.watchers["sector" + vars.lastSavedSector].Current);
         int lastLastSectorCenths = vars.getSectorCenths(vars.lastSavedSector - 1);
-        print("lastLastSectorCenths=" + lastLastSectorCenths);
         return vars.timeUntilLastSector + lastSectorTime - new TimeSpan(0,0,0,0,lastLastSectorCenths * 10);
     }
     return new TimeSpan(0,0,0,0,0);
@@ -350,6 +318,15 @@ reset {
 } // Calls split if it didn't return true
 
 split {
+    if (vars.originalMode) {
+        if (vars.watchers["originalRaceSelected"].Current > 0 && vars.watchers["originalRaceSelected"].Old == 0) {
+            if (vars.watchers["originalSponsor"].Current == 0 && vars.watchers["originalTotalRaces"].Current == 0) {
+                return false;
+            }
+            return true;
+        }
+        return false;
+    }
     if (vars.lastSavedSector > vars.lastSplitSector){
         vars.timeUntilLastSector += vars.convertHexTimeToTimeSpan(vars.watchers["sector" + vars.lastSavedSector].Current);
         if (vars.lastSplitSector > 0) {
