@@ -2,6 +2,13 @@ An autosplitter for the awesome Top Gear SNES game
 
 Para português, clique [aqui](https://github.com/pedro-walter/topgear-autosplitter/blob/main/README_ptbr.md)
 
+# Supported emulators
+
+* Snes9x v1.60
+* higan v106 or v106.112
+* bsnes v107, v107.1, v107.2/107.3, v110, v111, v112 or v115
+* BizHawk v2.3, v2.3.1, v2.3.2, v2.6.1, v2.6.2
+
 # Usage
 
 Either:
