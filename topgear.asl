@@ -54,6 +54,8 @@ init // Runs when the emulator process is found
         new MemoryWatcher<byte>((IntPtr)memoryOffset + 0x1E58) { Name = "countdownOn" },
         new MemoryWatcher<ushort>((IntPtr)memoryOffset + 0x1EAE) { Name = "counter" },
         new MemoryWatcher<byte>((IntPtr)memoryOffset + 0x1E76) { Name = "playerOneCurrentLap" },
+        new MemoryWatcher<byte>((IntPtr)memoryOffset + 0x013C) { Name = "isOnDemo" },
+        new MemoryWatcher<ushort>((IntPtr)memoryOffset + 0x0026) { Name = "resetIfZero" },
     };
 
     Func <bool> isRaceFinished = () => {
@@ -78,12 +80,13 @@ update {
     if(vars.isInARace == false){
         var oldCountdownOn = vars.watchers["countdownOn"].Old;
         var currentCountdownOn = vars.watchers["countdownOn"].Current;
-        vars.isInARace = oldCountdownOn == 1 && currentCountdownOn == 0;
+        vars.isInARace = oldCountdownOn == 1 && currentCountdownOn == 0 && vars.watchers["isOnDemo"].Current == 0;
         // if(vars.isInARace){
         //     print("A RACE JUST STARTED");
         // }
         return vars.isInARace;
     }
+    return true;
 } // Calls isloading, gameTime and reset
 
 start // Runs if update did not return false AND the timer is not running nor paused
@@ -118,7 +121,12 @@ gameTime
 }
 
 reset {
-    return false; // Never resets automatically
+    if (vars.watchers["resetIfZero"].Current == 0 && vars.watchers["resetIfZero"].Old != 0){
+        vars.previousTracksCents = 0;
+        vars.isInARace = false;
+        return true;
+    }
+    return false;
 } // Calls split if it didn't return true
 
 split {
